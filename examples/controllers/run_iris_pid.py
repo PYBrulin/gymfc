@@ -41,6 +41,19 @@ https://github.com/ivmech/ivPID/blob/master/PID.py, windup has been removed so
 another variable was not introduced.
 """
 
+currentMixer=[ 
+        [ 1.0, -1.0,  0.598, -1.0 ],          # REAR_R
+        [ 1.0, -0.927, -0.598,  1.0 ],          # RONT_R
+        [ 1.0,  1.0,  0.598,  1.0 ],          # REAR_L
+        [ 1.0,  0.927, -0.598, -1.0 ],          # RONT_L
+    ]
+
+r = [2, 10, 0.005]
+p = [10, 10, 0.005]
+y = [4, 50, 0.005]
+r_i = r
+p_i = p
+y_i = y
 
 def plot_step_response(desired, actual,
                  end=1., title=None,
@@ -87,16 +100,12 @@ def plot_step_response(desired, actual,
     ax[0].plot(t, desired[:,0], reflinestyle)
     ax[0].plot(t, desired[:,0] -  threshold[:,0] , error_linestyle, alpha=0.5)
     ax[0].plot(t, desired[:,0] +  threshold[:,0] , error_linestyle, alpha=0.5)
- 
     r = actual[:,0]
     ax[0].plot(t[:len(r)], r, linewidth=res_linewidth)
-
     ax[0].grid(True)
 
 
-
     """ PITCH """
-
     ax[1].axhline(0, color="#AAAAAA")
     ax[1].plot(t, desired[:,1], reflinestyle)
     ax[1].plot(t, desired[:,1] -  threshold[:,1] , error_linestyle, alpha=0.5)
@@ -125,9 +134,9 @@ class Policy(object):
 
 class PIDPolicy(Policy):
     def __init__(self):
-        self.r = [2, 10, 0.005]
-        self.p = [10, 10, 0.005]
-        self.y = [4, 50, 0.0]
+        self.r = r_i
+        self.p = p_i
+        self.y = y_i
         self.controller = PIDController(pid_roll = self.r, pid_pitch = self.p, pid_yaw =self.y )
 
     def action(self, state, sim_time=0, desired=np.zeros(3), actual=np.zeros(3) ):
@@ -156,7 +165,6 @@ def eval(env, pi):
         desireds.append(desired)
         if done:
             break
-    env.close()
     return desireds, actuals
 
 
@@ -229,12 +237,13 @@ class PIDController(object):
         motorOutputRange = self.maxthrottle - self.minthrottle# throttle max - throttle min 
         motorOutputMin = self.minthrottle
 
-        currentMixer=[ 
-            [ 1.0, -1.0,  0.598, -1.0 ],          # REAR_R
-            [ 1.0, -0.927, -0.598,  1.0 ],          # RONT_R
-            [ 1.0,  1.0,  0.598,  1.0 ],          # REAR_L
-            [ 1.0,  0.927, -0.598, -1.0 ],          # RONT_L
-        ]
+        global currentMixer
+        # currentMixer=[ 
+        #     [ 1.0, -1.0,  0.598, -1.0 ],          # REAR_R
+        #     [ 1.0, -0.927, -0.598,  1.0 ],          # RONT_R
+        #     [ 1.0,  1.0,  0.598,  1.0 ],          # REAR_L
+        #     [ 1.0,  0.927, -0.598, -1.0 ],          # RONT_L
+        # ]
         mixer_index_throttle = 0
         mixer_index_roll = 1
         mixer_index_pitch = 2 
@@ -337,7 +346,7 @@ class PID:
         self.Ki = I
         self.Kd = D
 
-        self.sample_time = 0.00
+        self.sample_time = 0.001
         self.current_time = 0
         self.last_time = self.current_time
 
@@ -427,25 +436,30 @@ class PID:
 
 def main(env_id, seed):
     env = gym.make(env_id)
-    rank = MPI.COMM_WORLD.Get_rank()
-    workerseed = seed + 1000000 * rank
-    env.seed(workerseed)
-    pi = PIDPolicy()
-    desireds, actuals = eval(env, pi)
+    env.render() #Added Render
+    for i in range(2):
+        rank = MPI.COMM_WORLD.Get_rank()
+        workerseed = seed + 1000000 * rank
+        env.seed(workerseed)
+        pi = PIDPolicy()
+        desireds, actuals = eval(env, pi)
+
     title = "PID Step Response in Environment {}".format(env_id)
+    env.close()
     plot_step_response(np.array(desireds), np.array(actuals), title=title)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     parser = argparse.ArgumentParser("Evaluate a PID controller")
     parser.add_argument('--env-id', help="The Gym environement ID", type=str,
                         default="AttFC_GyroErr-MotorVel_M4_Ep-v0")
+                        # AttFC_GyroErr-MotorVel_M4_Con-v0
     parser.add_argument('--seed', help='RNG seed', type=int, default=17)
 
     args = parser.parse_args()
     current_dir = os.path.dirname(__file__)
     config_path = os.path.join(current_dir,
-                               "../configs/iris.config")
+                               "../configs/tundra.config")
     print ("Loading config from ", config_path)
     os.environ["GYMFC_CONFIG"] = config_path
 
